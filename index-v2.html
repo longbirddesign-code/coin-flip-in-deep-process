@@ -4,31 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="manifest" href="manifest.json">
-    <title>Quantum Toss v15</title>
+    <title>Quantum Toss v14 + Sensors</title>
     <style>
         :root { --bg: #0a0a0c; --blue1: #a2f2ff; --blue2: #00d2ff; }
-        body { text-align: center; font-family: sans-serif; background-color: var(--bg); color: white; user-select: none; touch-action: none; overflow: hidden; }
+        body { text-align: center; font-family: -apple-system, sans-serif; margin: 0; background-color: var(--bg); color: white; user-select: none; -webkit-user-select: none; overflow: hidden; touch-action: none; }
         h1 { margin-top: 40px; font-weight: 200; letter-spacing: 5px; color: #eee; }
         #result { font-size: 55px; font-weight: bold; margin: 30px 0; height: 120px; display: flex; justify-content: center; align-items: center; }
-        .dashboard { background: rgba(255,255,255,0.05); margin: 20px auto; padding: 15px; border-radius: 10px; width: 80%; max-width: 300px; text-align: left; border: 1px solid #333; }
-        .sensor-item { font-size: 12px; margin: 5px 0; color: #888; display: flex; justify-content: space-between; }
+        .flipping { opacity: 0.5; transform: scale(0.95); filter: blur(2px); }
+        #tossBtn { width: 220px; height: 220px; border-radius: 50%; border: 2px solid var(--blue2); background: none; color: white; font-size: 24px; cursor: pointer; position: relative; }
+        .stats { margin-top: 30px; display: flex; justify-content: center; gap: 40px; font-size: 14px; color: #888; }
+        .dashboard { background: rgba(255,255,255,0.05); margin: 30px auto; padding: 12px; border-radius: 8px; width: 70%; max-width: 250px; text-align: left; border: 1px solid #222; }
+        .sensor-item { font-size: 10px; margin: 4px 0; color: #555; display: flex; justify-content: space-between; text-transform: uppercase; }
         .active-green { color: #00ff88 !important; }
-        #tossBtn { width: 220px; height: 220px; border-radius: 50%; border: 2px solid var(--blue2); background: none; color: white; font-size: 24px; cursor: pointer; transition: all 0.2s; position: relative; }
-        #tossBtn:active { transform: scale(0.9); background: rgba(0, 210, 255, 0.2); }
     </style>
 </head>
 <body>
 
-    <h1>BRAFT</h1>
+    <h1>QUANTUM TOSS</h1>
     <div id="result">HOLD</div>
 
     <button id="tossBtn">TOSS</button>
 
+    <div class="stats">
+        <div>HOLE: <span id="holeCount">0</span></div>
+        <div>JJAK: <span id="jjakCount">0</span></div>
+    </div>
+
     <div class="dashboard">
-        <div style="font-size: 10px; color: #555; margin-bottom: 8px;">HARDWARE MONITOR</div>
-        <div id="accel" class="sensor-item"><span>Accelerometer (Tilt)</span> <span>OFF</span></div>
-        <div id="gyro" class="sensor-item"><span>Gyroscope (Rotation)</span> <span>OFF</span></div>
-        <div id="mag" class="sensor-item"><span>Magnetometer (Mag)</span> <span>OFF</span></div>
+        <div id="accel" class="sensor-item"><span>Motion</span> <span id="s1">OFF</span></div>
+        <div id="gyro" class="sensor-item"><span>Rotation</span> <span id="s2">OFF</span></div>
     </div>
 
     <script>
@@ -36,43 +40,66 @@
         const resText = document.getElementById('result');
         const btn = document.getElementById('tossBtn');
 
-        // Logic to track sensors and update UI
+        // Sensor Tracking
         window.addEventListener('deviceorientation', (e) => {
             if (e.beta !== null) {
-                document.getElementById('accel').innerHTML = `<span>Accelerometer</span> <span class="active-green">ON</span>`;
-                document.getElementById('gyro').innerHTML = `<span>Gyroscope</span> <span class="active-green">ON</span>`;
-                document.getElementById('mag').innerHTML = `<span>Magnetometer</span> <span class="active-green">ON</span>`;
+                document.getElementById('s1').innerText = "ACTIVE";
+                document.getElementById('s1').className = "active-green";
+                document.getElementById('s2').innerText = "ACTIVE";
+                document.getElementById('s2').className = "active-green";
                 currentSensorValue = (Math.abs(e.beta) + Math.abs(e.gamma)) / 180;
             }
         }, true);
 
         let startTime;
-        btn.onmousedown = btn.ontouchstart = () => {
+        const onStart = (e) => {
+            e.preventDefault();
             startTime = Date.now();
             resText.innerText = "...";
+            resText.classList.add('flipping');
+            btn.style.opacity = "0.7";
         };
 
-        btn.onmouseup = btn.ontouchend = () => {
+        const onEnd = () => {
             const releaseTime = Date.now();
             const power = releaseTime - startTime;
-            finalize(power, releaseTime);
+            let frames = 0;
+            const anim = setInterval(() => {
+                resText.innerText = Math.random() > 0.5 ? "HOLE" : "JJAK";
+                if (frames++ > 12) {
+                    clearInterval(anim);
+                    finalize(power, releaseTime);
+                }
+            }, 70);
         };
 
         function finalize(power, releaseTime) {
             const cryptoArr = new Uint32Array(2);
             window.crypto.getRandomValues(cryptoArr);
-            // The "Quantum" Seed calculation
             let seed = (cryptoArr[0] ^ releaseTime) + (cryptoArr[1] ^ Math.floor(currentSensorValue * 1000));
+            if (seed % 10 === 0) seed = seed * power;
+            
             let res = seed;
             for (let i = 0; i < 7; i++) {
                 res ^= (res << 13); res ^= (res >> 17); res ^= (res << 5);
             }
+            
             const win = (Math.abs(res) % 2 === 0) ? "Hole" : "Jjak";
             resText.innerText = win.toUpperCase();
-            if (navigator.vibrate) navigator.vibrate(50);
+            resText.classList.remove('flipping');
+            
+            if (win === "Hole") { hole++; document.getElementById('holeCount').innerText = hole; }
+            else { jjak++; document.getElementById('jjakCount').innerText = jjak; }
+            
+            if (navigator.vibrate) navigator.vibrate([40, 80]);
+            btn.style.opacity = "1";
         }
-        
-        // Register Service Worker for Offline Airplane Mode
+
+        btn.addEventListener('touchstart', onStart, {passive: false});
+        window.addEventListener('touchend', onEnd);
+        btn.addEventListener('mousedown', onStart);
+        window.addEventListener('mouseup', onEnd);
+
         if('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
     </script>
 </body>
