@@ -4,71 +4,207 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="manifest" href="manifest.json">
-    <title>Quantum Toss v14 + Sensors</title>
+    <title>Coin Flip</title>
     <style>
-        :root { --bg: #0a0a0c; --blue1: #a2f2ff; --blue2: #00d2ff; }
-        body { text-align: center; font-family: -apple-system, sans-serif; margin: 0; background-color: var(--bg); color: white; user-select: none; -webkit-user-select: none; overflow: hidden; touch-action: none; }
+        :root { 
+            --bg: #0a0a0c;
+            --blue1: #a2f2ff;
+            --blue2: #00d2ff;
+            --blue3: #0055ff;
+        }
+        body {
+            text-align: center; font-family: -apple-system, sans-serif;
+            margin: 0; background-color: var(--bg); color: white; 
+            user-select: none; -webkit-user-select: none; overflow: hidden;
+            touch-action: none;
+        }
         h1 { margin-top: 40px; font-weight: 200; letter-spacing: 5px; color: #eee; }
-        #result { font-size: 55px; font-weight: bold; margin: 30px 0; height: 120px; display: flex; justify-content: center; align-items: center; }
+        
+        #result {
+            font-size: 55px; font-weight: bold; margin: 30px 0; height: 120px;
+            display: flex; justify-content: center; align-items: center;
+        }
         .flipping { opacity: 0.5; transform: scale(0.95); filter: blur(2px); }
-        #tossBtn { width: 220px; height: 220px; border-radius: 50%; border: 2px solid var(--blue2); background: none; color: white; font-size: 24px; cursor: pointer; position: relative; }
-        .stats { margin-top: 30px; display: flex; justify-content: center; gap: 40px; font-size: 14px; color: #888; }
-        .dashboard { background: rgba(255,255,255,0.05); margin: 30px auto; padding: 12px; border-radius: 8px; width: 70%; max-width: 250px; text-align: left; border: 1px solid #222; }
-        .sensor-item { font-size: 10px; margin: 4px 0; color: #555; display: flex; justify-content: space-between; text-transform: uppercase; }
+
+        #chargeStatus {
+            font-size: 11px; height: 14px; letter-spacing: 2px;
+            margin-bottom: 6px; opacity: 0;
+            font-weight: bold; text-transform: uppercase;
+            pointer-events: none;
+        }
+
+        .charge-container { 
+            width: 100px; height: 6px; background: #1a1a1a; 
+            margin: 0 auto 20px auto; border-radius: 10px; overflow: hidden;
+            border: 1px solid #222;
+            pointer-events: none;
+        }
+
+        #chargeBar { width: 0%; height: 100%; background: var(--blue1); }
+
+        .stats { font-size: 20px; color: #aaa; margin-bottom: 10px; }
+        .stats span { color: var(--blue2); font-weight: bold; }
+        
+        #resetBtn {
+            font-size: 10px; color: #555; letter-spacing: 1px;
+            background: none; border: 1px solid #333; padding: 4px 10px;
+            border-radius: 4px; cursor: pointer; text-transform: uppercase;
+            position: relative; z-index: 10;
+        }
+
+        /* 새롭게 추가된 센서 대시보드 CSS */
+        .dashboard { 
+            background: rgba(255,255,255,0.02); margin: 25px auto 0 auto; 
+            padding: 12px 15px; border-radius: 10px; width: 70%; max-width: 250px; 
+            text-align: left; border: 1px solid #1a1a1a; 
+        }
+        .sensor-item { 
+            font-size: 10px; margin: 5px 0; color: #555; 
+            display: flex; justify-content: space-between; text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
         .active-green { color: #00ff88 !important; }
+        
+        .toss-bar { position: fixed; bottom: 50px; left: 0; width: 100%; text-align: center; }
+        
+        #tossBtn {
+            width: 130px; height: 130px; font-size: 22px; border-radius: 50%;
+            border: 3px solid var(--blue2); background: transparent; color: var(--blue2);
+            outline: none; -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.1);
+            touch-action: none;
+            position: relative; z-index: 100;
+        }
     </style>
 </head>
 <body>
 
-    <h1>QUANTUM TOSS</h1>
-    <div id="result">HOLD</div>
-
-    <button id="tossBtn">TOSS</button>
-
-    <div class="stats">
-        <div>HOLE: <span id="holeCount">0</span></div>
-        <div>JJAK: <span id="jjakCount">0</span></div>
-    </div>
+    <h1>COIN FLIP</h1>
+    <div id="result">HOLD BUTTON</div>
+    <div id="chargeStatus">RANDOM PICK</div>
+    <div class="charge-container"><div id="chargeBar"></div></div>
+    
+    <div class="stats">HOLE: <span id="holeCount">0</span> &nbsp;&nbsp; JJAK: <span id="jjakCount">0</span></div>
+    <button id="resetBtn" onclick="resetStats()">Clear Stats</button>
 
     <div class="dashboard">
-        <div id="accel" class="sensor-item"><span>Motion</span> <span id="s1">OFF</span></div>
-        <div id="gyro" class="sensor-item"><span>Rotation</span> <span id="s2">OFF</span></div>
+        <div id="accel" class="sensor-item"><span>MOTION</span> <span id="s1">OFF</span></div>
+        <div id="gyro" class="sensor-item"><span>ROTATION</span> <span id="s2">OFF</span></div>
     </div>
 
+    <div class="toss-bar"><button id="tossBtn">TOSS</button></div>
+
     <script>
-        let hole = 0, jjak = 0, currentSensorValue = 0;
-        const resText = document.getElementById('result');
+        let hole = 0, jjak = 0, holdStartTime = null, chargeInterval = null, vibInterval = null;
+        let currentSensorValue = 0;
+        let hasVibratedAtMid = false;
+
         const btn = document.getElementById('tossBtn');
+        const resText = document.getElementById('result');
+        const bar = document.getElementById('chargeBar');
+        const statusLabel = document.getElementById('chargeStatus');
 
-        // Sensor Tracking
-        window.addEventListener('deviceorientation', (e) => {
-            if (e.beta !== null) {
-                document.getElementById('s1').innerText = "ACTIVE";
-                document.getElementById('s1').className = "active-green";
-                document.getElementById('s2').innerText = "ACTIVE";
-                document.getElementById('s2').className = "active-green";
-                currentSensorValue = (Math.abs(e.beta) + Math.abs(e.gamma)) / 180;
+        function resetStats() {
+            if (holdStartTime) return;
+            hole = 0; jjak = 0;
+            document.getElementById('holeCount').innerText = "0";
+            document.getElementById('jjakCount').innerText = "0";
+            if (navigator.vibrate) navigator.vibrate(50);
+        }
+
+        // 대시보드 UI를 업데이트하는 함수
+        function updateSensorUI(statusText) {
+            const s1 = document.getElementById('s1');
+            const s2 = document.getElementById('s2');
+            s1.innerText = statusText;
+            s2.innerText = statusText;
+            if (statusText === "ACTIVE") {
+                s1.className = "active-green";
+                s2.className = "active-green";
             }
-        }, true);
+        }
 
-        let startTime;
+        async function activateSensors() {
+            try {
+                if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+                    const status = await DeviceOrientationEvent.requestPermission();
+                    if (status === 'granted') {
+                        window.addEventListener('deviceorientation', e => { currentSensorValue = (e.alpha || 0) + (e.beta || 0); });
+                        updateSensorUI("ACTIVE");
+                    } else {
+                        updateSensorUI("DENIED");
+                    }
+                } else {
+                    window.addEventListener('deviceorientation', e => { currentSensorValue = (e.alpha || 0); });
+                    updateSensorUI("ACTIVE");
+                }
+            } catch (e) { 
+                updateSensorUI("ERROR"); 
+            }
+        }
+
         const onStart = (e) => {
-            e.preventDefault();
-            startTime = Date.now();
-            resText.innerText = "...";
+            if (e.cancelable) e.preventDefault();
+            if (holdStartTime) return; 
+            
+            // 버튼을 처음 누를 때 센서가 꺼져있으면 활성화 시도
+            if (document.getElementById('s1').innerText === "OFF") activateSensors();
+            
+            holdStartTime = Date.now();
+            hasVibratedAtMid = false;
+            bar.style.width = "0%";
+            statusLabel.style.opacity = "0";
             resText.classList.add('flipping');
-            btn.style.opacity = "0.7";
+            
+            if (navigator.vibrate) navigator.vibrate(30);
+
+            chargeInterval = setInterval(() => {
+                let p = Math.min(((Date.now() - holdStartTime) / 1200) * 100, 100);
+                bar.style.width = p + "%";
+                statusLabel.style.opacity = "1";
+
+                if (p < 40) {
+                    statusLabel.innerText = "RANDOM PICK";
+                    statusLabel.style.color = "var(--blue1)";
+                    bar.style.background = "var(--blue1)";
+                } else if (p < 100) {
+                    statusLabel.innerText = "CONSIDERATION";
+                    statusLabel.style.color = "var(--blue2)";
+                    bar.style.background = "var(--blue2)";
+                    if (!hasVibratedAtMid) { 
+                        if (navigator.vibrate) navigator.vibrate(20); 
+                        hasVibratedAtMid = true; 
+                    }
+                } else {
+                    statusLabel.innerText = "CONVICTION";
+                    statusLabel.style.color = "var(--blue3)";
+                    bar.style.background = "var(--blue3)";
+                    if (!vibInterval) {
+                        vibInterval = setInterval(() => { if (navigator.vibrate) navigator.vibrate(40); }, 120);
+                    }
+                }
+            }, 50);
         };
 
-        const onEnd = () => {
+        const onEnd = (e) => {
+            if (!holdStartTime) return;
+            const power = Date.now() - holdStartTime;
             const releaseTime = Date.now();
-            const power = releaseTime - startTime;
+            
+            clearInterval(chargeInterval);
+            clearInterval(vibInterval);
+            chargeInterval = null;
+            vibInterval = null;
+            holdStartTime = null;
+
+            btn.style.opacity = "0.2"; 
+
             let frames = 0;
             const anim = setInterval(() => {
-                resText.innerText = Math.random() > 0.5 ? "HOLE" : "JJAK";
-                if (frames++ > 12) {
-                    clearInterval(anim);
-                    finalize(power, releaseTime);
+                resText.innerText = Math.random() > 0.5 ? "Hole..." : "Jjak...";
+                if (frames++ > 12) { 
+                    clearInterval(anim); 
+                    finalize(power, releaseTime); 
                 }
             }, 70);
         };
@@ -78,28 +214,25 @@
             window.crypto.getRandomValues(cryptoArr);
             let seed = (cryptoArr[0] ^ releaseTime) + (cryptoArr[1] ^ Math.floor(currentSensorValue * 1000));
             if (seed % 10 === 0) seed = seed * power;
-            
             let res = seed;
             for (let i = 0; i < 7; i++) {
                 res ^= (res << 13); res ^= (res >> 17); res ^= (res << 5);
             }
-            
             const win = (Math.abs(res) % 2 === 0) ? "Hole" : "Jjak";
             resText.innerText = win.toUpperCase();
             resText.classList.remove('flipping');
-            
             if (win === "Hole") { hole++; document.getElementById('holeCount').innerText = hole; }
             else { jjak++; document.getElementById('jjakCount').innerText = jjak; }
-            
             if (navigator.vibrate) navigator.vibrate([40, 80]);
             btn.style.opacity = "1";
         }
 
         btn.addEventListener('touchstart', onStart, {passive: false});
-        window.addEventListener('touchend', onEnd);
+        window.addEventListener('touchend', onEnd, {passive: false});
         btn.addEventListener('mousedown', onStart);
         window.addEventListener('mouseup', onEnd);
-
+        
+        // 비행기 모드 지원을 위한 Service Worker
         if('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
     </script>
 </body>
